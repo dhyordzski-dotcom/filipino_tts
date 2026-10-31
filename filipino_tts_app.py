@@ -22,6 +22,8 @@ import tkinter as tk
 
 import edge_tts
 
+from text_cleanup import clean_filipino_text
+
 APP_TITLE = "Filipino Text-to-Speech"
 
 # Built-in Filipino voices (always shown, even if the voice list can't be fetched).
@@ -31,9 +33,14 @@ DEFAULT_VOICES = {
 }
 
 SAMPLE_TEXT = (
-    "Magandang araw sa inyong lahat! Ito ay isang halimbawa ng "
-    "text-to-speech sa wikang Filipino. Salamat po!"
+    "Magandang araw po sa inyong lahat! Kumusta kayo? "
+    "Ito ay isang halimbawa ng text-to-speech sa wikang Filipino. "
+    "Sana ay magustuhan ninyo. Maraming salamat po!"
 )
+
+# A touch slower than the voice's default pace sounds more like natural,
+# conversational Filipino (the stock fil-PH voices read fairly fast).
+DEFAULT_RATE = -5
 
 
 # --------------------------------------------------------------------------- #
@@ -152,7 +159,7 @@ class FilipinoTTSApp(tk.Tk):
     def __init__(self) -> None:
         super().__init__()
         self.title(APP_TITLE)
-        self.geometry("760x560")
+        self.geometry("820x600")
         self.minsize(620, 460)
 
         self.player = AudioPlayer()
@@ -201,10 +208,23 @@ class FilipinoTTSApp(tk.Tk):
         # Sliders
         sliders = ttk.Frame(root)
         sliders.pack(fill=tk.X, pady=8)
-        self.rate_var = self._slider(sliders, "Bilis / Speed (%)", -50, 100, 0, 0)
+        self.rate_var = self._slider(sliders, "Bilis / Speed (%)", -50, 100, DEFAULT_RATE, 0)
         self.pitch_var = self._slider(sliders, "Tono / Pitch (Hz)", -50, 50, 0, 1)
         self.volume_var = self._slider(sliders, "Lakas / Volume (%)", -50, 50, 0, 2)
         sliders.columnconfigure(1, weight=1)
+
+        # Natural-reading options
+        natural_row = ttk.Frame(root)
+        natural_row.pack(fill=tk.X)
+        self.clean_var = tk.BooleanVar(value=True)
+        ttk.Checkbutton(
+            natural_row,
+            text="Natural na pagbasa: ayusin ang line breaks, daglat (Gng., Dr., atbp.), "
+                 "simbolo at emoji",
+            variable=self.clean_var,
+        ).pack(side=tk.LEFT)
+        ttk.Button(natural_row, text="Ipakita ang babasahin (Preview text)",
+                   command=self.on_preview_clean).pack(side=tk.RIGHT)
 
         # Buttons
         btns = ttk.Frame(root)
@@ -296,9 +316,29 @@ class FilipinoTTSApp(tk.Tk):
         if not text:
             messagebox.showwarning(APP_TITLE, "Walang teksto. Please paste some text first.")
             return None
+        if self.clean_var.get():
+            text = clean_filipino_text(text)
+            if not text:
+                messagebox.showwarning(APP_TITLE, "Walang mababasang teksto pagkatapos ayusin.")
+                return None
         voice = self.voices.get(self.voice_var.get(), "fil-PH-BlessicaNeural")
         return (text, voice, self.rate_var.get(), self.pitch_var.get(),
                 self.volume_var.get())
+
+    def on_preview_clean(self) -> None:
+        """Replace the text box with the cleaned-up text so the user sees what is read."""
+        original = self.text.get("1.0", tk.END).strip()
+        if not original:
+            return
+        cleaned = clean_filipino_text(original)
+        if cleaned == original:
+            self.status_var.set("Ayos na ang teksto (Text already clean).")
+            return
+        self.text.edit_separator()
+        self.text.delete("1.0", tk.END)
+        self.text.insert("1.0", cleaned)
+        self.text.edit_separator()
+        self.status_var.set("Inayos ang teksto. Ctrl+Z para ibalik (Undo to restore).")
 
     def _set_busy(self, busy: bool, msg: str = "") -> None:
         self.busy = busy
